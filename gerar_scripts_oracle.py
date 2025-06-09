@@ -377,7 +377,7 @@ try {{
     # As colunas do CSV já devem ter os nomes do Oracle devido ao rename no Python
     $colunas = $headers -split "{CSV_DELIMITADOR_SAIDA}"
     # Remove aspas se existirem em nomes de coluna no CSV
-    $colunasCsv = $colunas | ForEach-Object {{ $_.Trim('"') }}
+    $colunasCsv = $colunas | ForEach-Object {{ $_.Trim([char]34) }}
 
 }} catch {{
     Write-Host "❌ Erro ao acessar o CSV: $_" -ForegroundColor Red
@@ -385,28 +385,28 @@ try {{
 }}
 
 Write-Host "🔌 Conectando ao banco para obter as colunas da tabela: $tabela..." -ForegroundColor Cyan
-$tempSql = "$($env:LOCAL_EXEC_PATH)\temp_describe.sql"
-$tempResult = "$($env:LOCAL_EXEC_PATH)\temp_columns.txt"
-$query = """
+$tempSql = "$($env:LOCAL_EXEC_PATH)\\temp_describe.sql"
+$tempResult = "$($env:LOCAL_EXEC_PATH)\\temp_columns.txt"
+$query = @"
 SET HEADING OFF
 SET FEEDBACK OFF
 SET PAGESIZE 0
 SET TRIMSPOOL ON
 SET LINESIZE 1000
 SELECT column_name FROM all_tab_columns
-WHERE table_name = UPPER('$tabela') AND owner = UPPER('$usuario');
+WHERE table_name = UPPER('{0}') AND owner = UPPER('{1}');
 EXIT
-"""
+"@ -f $tabela, $usuario
 
 $query | Set-Content -Encoding ASCII $tempSql
 $env:ORACLE_HOME = $oracleHome
-$env:PATH = "$oracleHome\BIN;$env:PATH" # Correção na variável PATH
+$env:PATH = "$oracleHome\\BIN;$env:PATH" # Correção na variável PATH
 $env:NLS_LANG = $nlsLang
 & sqlplus -S "$usuario/$senha@$dsn" "@$tempSql" > $tempResult 2>&1
 
 
 # Lê colunas reais da tabela
-$colunasBanco = os.popen(f'powershell -Command "(Get-Content \'{tempResult}\') | Where-Object {{$_.trim() -ne \'\'}}"', 'r').read().strip().split('\n')
+$colunasBanco = (Get-Content "$tempResult") | Where-Object {{ $_.trim() -ne '' }} | ForEach-Object {{ $_.Trim() }}
 
 if ($colunasBanco.Count -eq 0) {{
     Write-Host "`n❌ Falha ao obter colunas da tabela no banco. Verifique usuario, senha, DSN e nome da tabela." -ForegroundColor Red
@@ -428,7 +428,7 @@ foreach ($coluna in $colunasCsv) {{ # $colunasCsv já é a lista de nomes do CSV
 }}
 
 if ($colunasValidas.Count -eq 0) {{
-    Write-Host "`n❌ Nenhuma coluna valida encontrada para importar.` -ForegroundColor Red
+    Write-Host "`n❌ Nenhuma coluna valida encontrada para importar.`" -ForegroundColor Red
     exit 1
 }}
 
